@@ -1,0 +1,10 @@
+# Data
+data/raw/
+data/extra/
+*.zip
+
+# Mac
+.DS_Store
+
+# Tableau temp files
+*.twbr
