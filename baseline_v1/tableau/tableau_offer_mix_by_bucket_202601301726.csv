@@ -1,0 +1,5 @@
+"offer_type","avg_freight_bucket","n_customers","total_net_ev","total_cost"
+free_shipping,"20-30",1,22.95,25.05
+free_shipping,"31-50",1,4.135000000000005,37.44
+free_shipping,"51-100",1,166.76500000000004,91.815
+free_shipping,Free,1,1.2221221349518019,0.0
