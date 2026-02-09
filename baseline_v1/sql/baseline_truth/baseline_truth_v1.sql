@@ -110,12 +110,11 @@ SELECT
   offer_type,
   expected_value,
   ev_per_cost,
-  expected_order_value_at_anchor,
   p0_60d_final,
   p1_60d,
   delta_p,
   cumulative_cost
-FROM budget_alloc
+FROM budget_alloco
 WHERE is_selected = true
 ORDER BY ev_per_cost DESC NULLS LAST, expected_value DESC
 LIMIT 10;
