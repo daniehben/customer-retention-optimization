@@ -1,225 +1,201 @@
-# Phase 4 — Offer Economics & Decision Rationale
+# Phase 4 — Offer Economics & Why the EV Engine Collapsed (and How it was Fixed)
 
-## Purpose of Offer Economics
+## Purpose of Phase 4
 
-The purpose of Phase 4 is **not** to maximize incentive usage, but to evaluate whether **monetary retention incentives are economically justified at all** under realistic business constraints.
+Phase 4 builds a **transparent unit-economics decision engine** that answers:
 
-Given the business context:
+> If we spend money on retention (discounts / free shipping), do we get enough incremental profit to justify the cost?
 
-* thin contribution margins
-* sensitivity to cash leakage
-* high baseline reorder behavior
+This phase is not about “maximizing incentives.” It is about **economic justification** under thin margins and cash constraints.
 
-the objective is to determine **when incentives should be avoided**, and under what conditions (if any) they can be justified as last-resort actions.
+The output of Phase 4 is a customer × offer table with:
 
----
+* baseline reorder probability (`p_base_default`)
+* assumed uplift (`lift_default`)
+* expected incremental profit
+* expected incentive cost (conversion-conditional)
+* **net expected value** (`net_ev_default`)
 
-## Modeling Framework (Summary)
-
-Each customer anchor is evaluated across multiple hypothetical actions:
-
-* No intervention
-* Free shipping
-* 5% discount
-* 10% discount
-
-For each customer × offer combination, the model computes:
-
-* Baseline reorder probability (empirical, by risk band)
-* Incremental lift (policy assumptions)
-* Incremental expected margin
-* Expected incentive cost (conversion-conditional)
-* Net expected value (EV)
-
-The default evaluation horizon is **180 days**, chosen to align with observed customer reorder behavior and avoid artificial zero-probability bias.
-
-All calculations use **conservative, cash-realistic assumptions**, reflecting how costs are incurred in practice.
+Default horizon used: **180 days** (kept for comparability and to avoid short-window artifacts).
 
 ---
 
-## Key Finding 1 — No Incentive Produces Positive Expected Value
+## Modeling Framework (What We Compute)
 
-### Evidence
+For each anchor (customer, anchor_date), four actions were evaluated:
 
-Across all customers and all offer types:
+* `no_offer`
+* `free_shipping`
+* `discount_5_percent`
+* `discount_10_percent`
 
-* **0% of customer-offer combinations have positive EV**
-* This holds across:
+For each customer × offer:
 
-  * all risk bands (low, medium, high, dormant)
-  * all monetary incentives tested
-  * all customers in the dataset
+1. **Baseline probability**
+   `p_base_default` = empirical reorder probability by segment (default horizon = 180d).
 
-This result is unanimous and stable.
+2. **Lift assumption**
+   `lift_default` = `p_base_default × lift_pct` (policy matrix).
 
-### Interpretation
+3. **Offer probability**
+   `p_offer_default = min(1, p_base_default + lift_default)`
 
-This indicates that **monetary incentives do not generate sufficient incremental behavior** to offset their cost under current business economics.
+4. **Incremental probability**
+   `delta_p_default = p_offer_default - p_base_default`
 
-This is not a targeting failure — the result persists even when analyzed by risk segment.
+5. **Incremental profit (expected)**
+   `incremental_profit = delta_p_default × expected_margin_value`
+   where `expected_margin_value = margin_rate × AOV`
 
----
+6. **Expected offer cost (conversion conditional)**
+   `expected_offer_cost = p_offer_default × offer_cost`
 
-## Key Finding 2 — Incentives Generate Cost Without Incremental Value
-
-### Evidence
-
-Decomposing EV into value and cost components shows:
-
-* **Average incremental profit ≈ 0** for all incentives
-* **Expected incentive costs remain strictly positive**
-* Net EV is therefore negative across the board
-
-This pattern holds consistently across:
-
-* discount-based incentives
-* free shipping
-* all customer risk segments
-
-### Interpretation
-
-The model shows that incentives primarily **discount existing behavior** rather than creating new behavior.
-
-In practical terms:
-
-* customers who would have reordered anyway receive incentives
-* incentives do not meaningfully change reorder probability
-* margin is reduced without corresponding value creation
-
-This is the most dangerous scenario for a low-margin business.
+7. **Net EV**
+   `net_ev_default = incremental_profit - expected_offer_cost`
 
 ---
 
-## Key Finding 3 — Revenue-Based Incentives Are Structurally Harmful
+## The critical failure discovered: EV collapse due to baseline collapse
 
-### Evidence
+### What was observed (symptom)
 
-Percentage-based discounts perform worse as order value increases:
+In the initial Phase 4 run, EV behaved like this:
 
-* incentive cost scales with AOV
-* high-value customers are penalized most
-* expected costs rise faster than incremental value
+* **most EV values were ~0**
+* the remaining values were negative (essentially “just the cost”)
+* best-offer logic defaulted to `no_offer` for everyone
 
-Even modest discounts (5%) remain negative EV across all segments.
+### Why that happens (mechanism)
 
-### Interpretation
+The EV formula depends on incremental value:
 
-Revenue-based incentives are **structurally misaligned** with thin-margin businesses.
+* If `delta_p_default ≈ 0`, then:
 
-They:
+  * `incremental_profit ≈ 0`
+  * `net_ev_default ≈ - expected_offer_cost` (negative for any paid offer)
 
-* scale with order size
-* apply to baseline conversions
-* create uncontrolled margin leakage
+So the EV engine collapses when **delta collapses**.
 
-This is not a parameter-tuning issue — it is a strategic constraint.
+### The real root cause (not SQL, but logic validity)
 
----
+Delta collapsed because baseline probabilities (`p_base_default`) were collapsing toward extremes due to **future leakage** in segmentation:
 
-## Key Finding 4 — Free Shipping Does Not Solve the Problem
+* risk bands were built using `days_to_next_order`
+* that is **future information**, not available at decision time
+* outcome-based bands can make baselines behave like hindsight labels
+* which kills meaningful incremental movement in probability
 
-### Evidence
+In plain business terms:
 
-Free shipping:
+> If you segment customers using future outcomes, your “baseline probability” stops behaving like a real forecast and starts behaving like a label — and EV becomes “cost-only.”
 
-* has bounded cost
-* performs better than percentage discounts
-* but still produces **negative EV in all segments**
-
-### Interpretation
-
-While shipping friction may be relevant, **subsidizing shipping alone is insufficient** to justify intervention under current margins and observed lift.
-
-This suggests that:
-
-* friction reduction alone does not create enough incremental behavior
-* non-price experience improvements may be more effective than monetary subsidies
+This was the key insight of Phase 4.
 
 ---
 
-## Key Finding 5 — “No Offer” Is the Dominant Action
+## The Phase 4 fix: make the baseline decision-time valid
 
-### Evidence
+To fix EV collapse, the segmentation key used for baselines had to be:
 
-For all customers:
+✅ based on **pre-anchor features** (what the business knows at the moment of decision)
+❌ not based on the future (`days_to_next_order`)
 
-* “no_offer” has EV = 0
-* all incentives have EV < 0
+So instead of outcome-based risk bands, **feature-based risk segments** (recency band + AOV tier) were created in Phase 3:
 
-### Interpretation
+* segmentation uses **recency_days** and **aov_pre_anchor**
+* `days_to_next_order` remains as the *evaluation target* used only to compute reorder probabilities by segment
 
-From a financial perspective, **non-intervention strictly dominates intervention** under current assumptions.
+Once segmentation became decision-time valid:
 
-This is not an absence of recommendation — it is a **clear recommendation to preserve capital**.
-
----
-
-## Strategic Implications
-
-### 1. Incentives Should Not Be Default Retention Tools
-
-The analysis shows that incentives:
-
-* do not improve outcomes
-* consistently reduce expected value
-* increase financial risk
-
-Therefore, incentives should be treated as **exceptional actions**, not standard policy.
+* `p_base_default` became realistic (not degenerate)
+* `delta_p_default` became non-zero
+* incremental_profit became meaningful again
+* EV no longer collapsed into cost-only recommendations
 
 ---
 
-### 2. Retention Decisions Should Prioritize Harm Avoidance
+## What Phase 4 ultimately concludes (correct version)
 
-The primary value of this model is in answering:
+### Key Finding 1 — The EV engine is highly sensitive to baseline validity
 
-> “Who should explicitly *not* receive incentives?”
+**Evidence:** when segmentation leaks future outcomes, baseline probabilities become unstable and delta collapses. EV becomes dominated by incentive cost.
 
-Avoiding unprofitable actions produces more value than attempting marginal gains through discounts.
-
----
-
-### 3. Monetary Incentives Are Last-Resort Winbacks
-
-If incentives are ever used, they should be:
-
-* limited to extreme risk cases
-* justified by unusually high lifetime value
-* deployed only when the alternative (losing the customer) is demonstrably worse
-
-Under current data and assumptions, **no such cases exist**.
+**Interpretation:** EV engines are not “plug-and-play.” If the baseline is not decision-time valid, the whole recommendation system becomes logically invalid.
 
 ---
 
-## What This Phase Does *Not* Claim
+### Key Finding 2 — Under realistic retailer economics, most customers should receive no offer
 
-* It does not claim incentives never work in general
-* It does not rule out non-monetary interventions
-* It does not assume lift is zero — it demonstrates lift is insufficient relative to cost
+A realistic business outcome was confirmed after fixes:
 
-This phase evaluates incentives **under conservative, realistic assumptions**, which is appropriate for a financially constrained business.
+* `no_offer` becomes the dominant action for most anchors
+* incentives win only when incremental profit truly exceeds expected cost
 
----
-
-## Phase 4 Conclusion
-
-> **Under current unit economics and observed customer behavior, monetary retention incentives produce negative expected value across all customer segments.
-> The optimal policy is to minimize incentive usage and reserve intervention only for exceptional, high-risk cases where inaction would be more damaging.**
-
-This conclusion is supported directly by:
-
-* empirical baseline behavior
-* transparent cost modeling
-* conservative lift assumptions
-* customer-level expected value analysis
+**Interpretation:** For thin-margin retailers, a healthy policy is selective, not generous.
 
 ---
 
-## Transition to Final Policy Layer
+### Key Finding 3 — Free shipping can be rational, but only for a small subset
 
-With the economic viability of incentives evaluated and found lacking, the next step is **not further optimization**, but **formalizing a decision policy** that:
+After leakage fixes and streamlining:
 
-* encodes non-intervention as the default
-* restricts incentives to exceptional scenarios
-* protects the business from margin erosion
+* free_shipping showed **very negative worst-case EV** (danger if applied broadly)
+* but a **small subset** produced positive EV (targetable)
 
+**Interpretation:** free shipping is not a blanket retention lever. It is a targeted tactic for cases where:
+
+* shipping friction is meaningful, and
+* margin × uplift is high enough, and
+* freight burden is not structurally catastrophic
+
+---
+
+### Key Finding 4 — Percentage discounts are structurally risky when the retailer absorbs them
+
+Under the standard assumption it was confirmed that:
+
+> “We’re a retailer absorbing discounts ourselves.”
+
+Discount cost scales with AOV, so it can easily exceed incremental margin effects, especially with thin contribution margin assumptions.
+
+**Interpretation:** discounts should be treated as high-risk tools unless there is strong evidence of incremental lift — and even then should be constrained by policy gates (Phase 5).
+
+---
+
+## What Phase 4 does *not* claim (updated)
+
+* It does **not** claim incentives never work.
+* It does **not** claim EV must be positive frequently.
+* It does **not** treat assumptions as truth — it shows how assumptions interact and where failure modes appear.
+* It does **not** recommend blanket incentives; it recommends a controlled policy architecture.
+
+---
+
+## Phase 4 Deliverables (views)
+
+Phase 4 consists of:
+
+* `churn.v_6_customer_offer_spine`
+* `churn.v_6_p_base_by_risk_segment`
+* `churn.v_6_4_offer_spine`
+* `churn.v_6_lift_assumption`
+* `churn.v_6_offer_ev`
+
+---
+
+## Phase 4 Conclusion (correct)
+
+> Phase 4 produced a deployable offer-economics framework and revealed a critical validity requirement: baseline segmentation must be decision-time feature-based (not outcome-based), otherwise the EV engine collapses into cost-only logic. After removing leakage and rebuilding baselines using feature-based risk segments, the system behaves realistically: most customers correctly receive no offer, while a small subset can justify targeted interventions (most commonly free shipping) under strict economic constraints.
+
+---
+
+## Transition to Phase 5
+
+With the EV engine stable, Phase 5 formalizes the policy layer:
+
+* **Phase 5B:** eligibility gates (who is even allowed to be considered)
+* **Phase 5C:** EV spine for eligible customers
+* **Phase 5D:** choose best offer per anchor with no-offer fallback when EV ≤ 0
+
+This ensures incentives are used only when justified and prevents margin leakage.
 

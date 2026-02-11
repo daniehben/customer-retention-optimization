@@ -1,4 +1,4 @@
-# **Step 3 – Baseline Risk Segmentation (From Churn to Time-to-Event)**
+# **Step 3 – Baseline Outcome Segmentation (Time-to-Event) + Why It Cannot Drive Decisions**
 
 ## Original approach
 
@@ -26,14 +26,39 @@ This reframing allows customer behavior to be compared on a continuous time dime
 
 ## Risk band definition
 
+Risk band definition (outcome-based, post-anchor)
+
+To describe return behavior in a low-repeat dataset, customers are assigned to observed return-speed bands using days_to_next_order, which is measured after the anchor date:
+
+* **Low risk (≤90 days)**: returned quickly after the anchor
+
+* **Medium risk (91–120 days)**: returned, but with delay
+
+* **High risk (121–180 days)**: returned very late
+
+* **Dormant / very high risk (180+ days or no return)**: did not return within the observed window (or never returned)
+
+These bands are intentionally outcome-based. They are useful for:
+
+* Understanding how long it takes customers to come back (when they do)
+
+* Measuring baseline reorder rates by horizon (e.g., 90/120/180/365 days)
+
+* Benchmarking how “hard” different customer groups are to win back
+
+#### Important limitation (deployability):
+Because these bands are defined using future information (days_to_next_order), they cannot be used as decision-time risk segments for incentive targeting. In a real retention workflow, the business does not know the next order date at the moment it decides whether to intervene. Using outcome-defined bands inside the EV policy would introduce future leakage and can distort baseline probabilities toward extreme values (near 0 or 1), which later collapses lift (delta_p) and expected value.
+
+For that reason, Phase 4/5 keeps these bands as a descriptive baseline and shifts the decision segmentation to feature-based risk segments derived only from pre-anchor information (recency + AOV tiers).
 Customers are assigned to **risk bands** based solely on observed time-to-next-order:
 
-* **Low risk (≤90 days)**: fast returners
-* **Medium risk (91–120 days)**: delayed returners
-* **High risk (121–180 days)**: very delayed returners
-* **Dormant / very high risk (180+ days or no return)**: non-returning customers
 
-These risk bands represent **outcomes**, not predictions.
+## Second issue discovered: decision-time validity (future leakage)
+
+While outcome-based risk bands are useful for describing customer return behavior, they are not valid as inputs to a real retention decision. The bands are defined using days_to_next_order, which is only known after the anchor date. That means using these bands to choose incentives would introduce future leakage: the policy would implicitly depend on outcomes that were not available at the time the business would actually act.
+
+This distinction matters because Phase 4/5 requires a baseline probability (p_base) that reflects uncertainty at decision time. If the segmentation key is outcome-derived, baseline rates can become artificially extreme (near 0/1), which collapses incremental lift (delta_p) and makes expected value outputs dominated by costs rather than incremental profit.
+
 
 ## Role of behavioral buckets
 
@@ -46,12 +71,12 @@ These features do not determine risk bands; they explain them.
 
 ## Why this matters for next steps
 
-This time-to-event baseline creates a realistic foundation for:
+This Step 3 work produced two complementary assets:
 
-* Targeted intervention strategies (who is worth saving *now*)
-* Expected value calculations (who might still return)
-* More advanced modeling (survival analysis, uplift, or ranking)
+A descriptive baseline: time-to-next-order bands that summarize return speed and dormancy patterns in a low-repeat dataset.
 
-Rather than forcing churn into an unsuitable dataset, the analysis adapts to the true behavioral structure of the data.
+A decision constraint: the realization that outcome-defined bands cannot be used as decision-time segmentation for incentive targeting without leakage.
+
+Therefore, Phase 4/5 keeps days_to_next_order as the evaluation target (to compute reorder probabilities by segment and horizon), but shifts the segmentation used for the offer decision engine to feature-based risk segments built only from pre-anchor information (e.g., recency bands and AOV tiers). This change preserves deployability, restores meaningful baseline probabilities, and prevents expected value calculations from collapsing into “cost-only” recommendations.
 
 

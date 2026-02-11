@@ -31,7 +31,7 @@ WHERE days_to_next_order IS NOT NULL;
 
 -- TIME-to-EVENT ANALYSIS (NEW TARGET DEFINITION)
 
-CREATE OR REPLACE VIEW churn.v6_baseline_risk_segment AS
+CREATE OR REPLACE VIEW churn.v_6_baseline_risk_segment AS
 WITH spine AS(
     SELECT
     a.customer_unique_id,
@@ -81,22 +81,66 @@ LEFT JOIN churn.v6_churn_outcomes o
     FROM spine
 ), banded AS (
   SELECT
-    *,
-    -- Risk band is OUTCOME-BASED (time-to-next-order), not feature-based
+    *, 
+    -- Update risk bands based on features to fix future leakage problem
     CASE
-      WHEN days_to_next_order IS NOT NULL AND days_to_next_order <=  90 THEN 'Low risk (≤90d)'
-      WHEN days_to_next_order IS NOT NULL AND days_to_next_order <= 120 THEN 'Medium risk (91–120d)'
-      WHEN days_to_next_order IS NOT NULL AND days_to_next_order <= 180 THEN 'High risk (121–180d)'
-      ELSE 'Dormant / very high risk (180+d or none)'
-    END AS risk_band
+      WHEN recency_days <= 9   THEN 'Active (≤p25)'
+      WHEN recency_days <= 42  THEN 'Warm (p25–p50)'
+      WHEN recency_days <= 144 THEN 'Cold (p50–p75)'
+      ELSE 'Dormant (≥p75)'
+    END AS recency_band,
+    CASE
+      WHEN aov_pre_anchor IS NULL THEN 'AOV_Unknown'
+      WHEN aov_pre_anchor < 45    THEN 'AOV_Low'
+      WHEN aov_pre_anchor < 85    THEN 'AOV_Mid'
+      WHEN aov_pre_anchor < 150   THEN 'AOV_High'
+      ELSE 'AOV_VeryHigh'
+    END AS aov_tier
   FROM labeled
 )
-SELECT *
+SELECT *,
+(recency_band || ' | ' || aov_tier) AS risk_segment
 FROM banded;
 
 
 
 -- ANALYSIS
+
+SELECT risk_segment, COUNT(*) AS n
+FROM churn.v_6_baseline_risk_segment
+GROUP BY 1
+ORDER BY n DESC;
+
+SELECT
+  recency_band,
+  MIN(recency_days) AS min_r,
+  MAX(recency_days) AS max_r,
+  COUNT(*) AS n
+FROM churn.v_6_baseline_risk_segment
+GROUP BY 1
+ORDER BY 1;
+
+SELECT
+  aov_tier,
+  MIN(aov_pre_anchor) AS min_aov,
+  MAX(aov_pre_anchor) AS max_aov,
+  COUNT(*) AS n
+FROM churn.v_6_baseline_risk_segment
+GROUP BY 1
+ORDER BY 1;
+
+
+SELECT risk_segment, COUNT(*) AS n
+FROM churn.v_6_baseline_risk_segment
+GROUP BY 1
+ORDER BY n ASC;
+
+SELECT recency_band, aov_tier, COUNT(*) n
+FROM churn.v_6_baseline_risk_segment
+GROUP BY 1,2
+ORDER BY 1,2;
+
+
 
 -- 1. How many have any next order at all?
 SELECT
