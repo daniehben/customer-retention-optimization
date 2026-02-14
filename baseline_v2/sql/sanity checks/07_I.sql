@@ -10,3 +10,4 @@ ORDER BY
   win_rate DESC,
   net_ev_in_winner_months DESC;
 
+select * FROM churn.v7i_scenario_winner_final;

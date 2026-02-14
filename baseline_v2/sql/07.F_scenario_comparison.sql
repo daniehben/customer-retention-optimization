@@ -15,14 +15,11 @@ scenario_agg AS(
         SUM(COALESCE(spend_raw_if_all_redeem_selected, 0.0)) AS total_spend_raw_if_all_redeem,
         SUM(COALESCE(incremental_profit_selected, 0.0)) AS total_incremental_profit,
         SUM(COALESCE(net_ev_selected, 0.0))             AS total_net_ev,
-
         SUM(COALESCE(selected_customers, 0)) AS total_selected_customers,
         AVG(COALESCE(selected_customers, 0)) AS avg_selected_customers_per_month,
-
         (SUM(COALESCE(spend_expected_selected, 0.0)) / NULLIF(SUM(budget_amount), 0)) AS util_expected_weighted,
         (SUM(COALESCE(spend_p95_selected, 0.0))      / NULLIF(SUM(budget_amount), 0)) AS util_p95_weighted,
         (SUM(COALESCE(incremental_profit_selected, 0.0)) / NULLIF(SUM(COALESCE(spend_expected_selected, 0.0)), 0)) AS roi_expected_weighted,
-
         MAX(COALESCE(p95_overspend_flag_month, 0)) AS any_p95_overspend_month,
         MAX(COALESCE(raw_overspend_flag_month, 0)) AS any_raw_overspend_month,
         SUM(COALESCE(raw_overspend_flag_month, 0)) AS raw_overspend_months

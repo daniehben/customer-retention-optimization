@@ -31,6 +31,5 @@ SELECT
     -- Data quality / explainability monitors
     SUM(CASE WHEN p_offer_scn IS NULL THEN 1 ELSE 0 END) AS missing_p_offer_rows,
     AVG(p_offer_scn) FILTER (WHERE selected_flag_p95_buffer = 1) AS avg_p_offer_selected
-
 FROM src
 GROUP BY 1,2;

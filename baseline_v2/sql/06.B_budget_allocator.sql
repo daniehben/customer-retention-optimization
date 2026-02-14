@@ -17,9 +17,7 @@ ranked AS(
     WHERE candidate_flag = 1
         AND COALESCE(net_ev_default, 0.0) > 0.0
         AND COALESCE(offer_cost, 0.0) > 0.0
-
-),
-scored AS(
+),scored AS(
     SELECT
     r.*,
     SUM(offer_cost) OVER (

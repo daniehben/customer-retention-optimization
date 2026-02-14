@@ -48,5 +48,4 @@ SELECT
   p95_overspend_p95_buffer_flag,
   raw_overspend_p95_buffer_flag,
   cut_by_buffer_flag
-
 FROM one_row;

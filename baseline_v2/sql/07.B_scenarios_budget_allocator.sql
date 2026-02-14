@@ -134,7 +134,6 @@ SELECT
   CASE WHEN f.priority_rank = 1 THEN 1 ELSE 0 END AS is_top_ev_customer_flag,
   CASE WHEN f.p_offer_scn IS NULL THEN 1 ELSE 0 END AS missing_p_offer_flag,
   CASE WHEN f.selected_flag_no_buffer = 1 AND f.selected_flag_p95_buffer = 0 THEN 1 ELSE 0 END AS cut_by_buffer_flag
-
 FROM final_scored f
 LEFT JOIN month_rollup m
   ON f.scenario_id = m.scenario_id

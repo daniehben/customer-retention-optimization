@@ -5,7 +5,6 @@ SELECT
   1.00::double precision AS lift_multiplier,
   1.00::double precision AS shipping_cost_multiplier,
   0.10::double precision AS budget_rate
-
 UNION ALL
 SELECT
   'MARGIN_20'::text,
@@ -13,7 +12,6 @@ SELECT
   1.00::double precision,
   1.00::double precision,
   0.10::double precision
-
 UNION ALL
 SELECT
   'MARGIN_30'::text,
@@ -21,7 +19,6 @@ SELECT
   1.00::double precision,
   1.00::double precision,
   0.10::double precision
-
 UNION ALL
 SELECT
   'LIFT_075'::text,
@@ -29,7 +26,6 @@ SELECT
   0.75::double precision,
   1.00::double precision,
   0.10::double precision
-
 UNION ALL
 SELECT
   'LIFT_125'::text,
@@ -37,7 +33,6 @@ SELECT
   1.25::double precision,
   1.00::double precision,
   0.10::double precision
-
 UNION ALL
 SELECT
   'SHIP_120'::text,
